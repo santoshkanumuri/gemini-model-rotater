@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="gemini-model-rotater",
-    version="1.0.0",
+    version="1.0.1",
     author="Santosh Kanumuri",
     author_email="pavan.kanumuri@hotmail.com",
     description="A package to rotate Gemini API models based on rate limits.",

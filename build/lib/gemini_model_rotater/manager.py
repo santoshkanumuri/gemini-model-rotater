@@ -1,4 +1,4 @@
-
+# File: gemini_model_rotater/manager.py
 import json
 from datetime import datetime, timedelta
 
@@ -16,9 +16,6 @@ class Model:
         # Timestamps for resetting the usage counters
         self.last_minute_reset = datetime.now()
         self.last_day_reset = datetime.now()
-
-        # Count of times a 429 (resource exhausted) error has occurred
-        self.resource_exhausted_count = 0
 
     def reset_minute_usage(self):
         self.current_minute_usage = 0
@@ -64,7 +61,6 @@ class Model:
         return (f"Model(name={self.name}, "
                 f"minute_usage={self.current_minute_usage}/{self.requests_per_minute_limit}, "
                 f"day_usage={self.current_day_usage}/{self.requests_per_day_limit}, "
-                f"resource_exhausted_count={self.resource_exhausted_count}, "
                 f"ranking={self.ranking})")
 
 
@@ -88,44 +84,31 @@ class ModelManager:
             )
             self.models.append(model)
 
-    def get_sorted_available_models(self, exclude_model_name: str = None):
-        """
-        Returns a sorted list of models that can make a request.
-        Sorted by:
-         1. Highest available daily requests (desc)
-         2. Highest available minute requests (desc)
-         3. Least resource exhausted count (asc)
-         4. Lower ranking (asc)
-        """
-        available_models = [
-            m for m in self.models
-            if m.can_make_request() and (exclude_model_name is None or m.name != exclude_model_name)
-        ]
-        available_models.sort(key=lambda m: (
-            -(m.requests_per_day_limit - m.current_day_usage),      # Highest available daily requests
-            -(m.requests_per_minute_limit - m.current_minute_usage),  # Highest available minute requests
-            m.resource_exhausted_count,                               # Least 429 error count
-            m.ranking                                               # Lower ranking is preferred
-        ))
-        return available_models
-
     def get_available_model(self) -> Model:
         """
         Returns the best available model based on:
-          1. Highest available daily requests.
-          2. Highest available minute requests.
-          3. Least resource exhausted count.
-          4. Lower ranking.
+          1. Highest remaining daily quota.
+          2. If equal, highest remaining per-minute quota.
+          3. If still equal, the model with the lower ranking value.
         Returns None if no model is available.
         """
-        # Update usage for all models.
+        # First update the usage for all models.
         for model in self.models:
             model.update_usage_if_needed()
 
-        sorted_models = self.get_sorted_available_models()
-        if sorted_models:
-            return sorted_models[0]
-        return None
+        available_models = [m for m in self.models if m.can_make_request()]
+        if not available_models:
+            return None
+
+        # Sort models using the specified criteria:
+        available_models.sort(
+            key=lambda m: (
+                -(m.requests_per_day_limit - m.current_day_usage),  # higher remaining daily requests
+                -(m.requests_per_minute_limit - m.current_minute_usage),  # higher remaining minute requests
+                m.ranking  # lower ranking value is preferred
+            )
+        )
+        return available_models[0]
 
     def increment_request(self, model_name: str):
         """
@@ -140,31 +123,29 @@ class ModelManager:
     def swap_model(self, current_model_name: str) -> Model:
         """
         When a 429 error is encountered, call this method to select a new model.
-        It first increments the resource exhausted count for the current model,
-        refreshes all usage counters, and then returns the best available alternative
-        (i.e. with available limits) based on:
-          1. Highest available daily requests.
-          2. Highest available minute requests.
-          3. Least resource exhausted count.
-          4. Lower ranking.
+        It first refreshes all usage counters (in case any reset has occurred),
+        then returns the best available model that is not the one specified.
         If no alternative is available, it will return the current model if it
         has recovered or None otherwise.
         """
-        # Update usage for all models.
+        # Update usage for all models
         for model in self.models:
             model.update_usage_if_needed()
 
-        # Increment resource exhausted count for the current model.
-        current_model = self.get_model_by_name(current_model_name)
-        if current_model:
-            current_model.resource_exhausted_count += 1
-
         # Look for an alternative model that is not the current one.
-        alternative_models = self.get_sorted_available_models(exclude_model_name=current_model_name)
+        alternative_models = [m for m in self.models if m.name != current_model_name and m.can_make_request()]
         if alternative_models:
+            alternative_models.sort(
+                key=lambda m: (
+                    -(m.requests_per_day_limit - m.current_day_usage),
+                    -(m.requests_per_minute_limit - m.current_minute_usage),
+                    m.ranking
+                )
+            )
             return alternative_models[0]
         else:
             # If no alternative is available, check if the current model has recovered.
+            current_model = next((m for m in self.models if m.name == current_model_name), None)
             if current_model and current_model.can_make_request():
                 return current_model
             else:

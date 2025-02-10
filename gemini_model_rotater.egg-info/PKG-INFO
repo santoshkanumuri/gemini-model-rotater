@@ -1,0 +1,94 @@
+Metadata-Version: 2.1
+Name: gemini-model-rotater
+Version: 1.0.0
+Summary: A package to rotate Gemini API models based on rate limits.
+Home-page: https://github.com/santoshkanumuri/gemini-model-rotater
+Author: Santosh Kanumuri
+Author-email: pavan.kanumuri@hotmail.com
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+
+# Gemini Model Rotater
+
+`gemini-model-rotater` is a Python package that rotates Gemini API models based on their rate limits. It loads model configurations from a JSON file and selects the best available model based on remaining quota. It also includes methods to increment usage after a request and swap models when rate limits are exceeded. The ranking of models determines the order in which they are selected. The package is useful for managing multiple models with different rate limits and selecting the best model for each request.
+
+## Installation
+
+You can install the package via pip with the following command:
+
+
+```bash
+pip install gemini-model-rotater==1.0.0
+```
+
+## Usage
+
+```python
+from gemini_model_rotater import ModelManager
+
+# Initialize with the JSON file containing your model configurations.
+manager = ModelManager("models.json")
+
+# Get the best available model.
+model = manager.get_available_model()
+if model:
+    print("Using model:", model.name)
+    # Perform your API call here.
+    manager.increment_request(model.name)
+else:
+    print("No models available. Please wait for limits to reset.")
+
+# If a 429 error occurs, swap to an alternative model.
+alternative_model = manager.swap_model(model.name)
+if alternative_model:
+    print("Swapped to model:", alternative_model.name)
+else:
+    print("No alternative models available.")
+```
+
+## Json File Format
+
+```json
+[
+  {
+    "name": "model_A",
+    "requests_per_minute": 10,
+    "requests_per_day": 100,
+    "ranking": 1
+  },
+  {
+    "name": "model_B",
+    "requests_per_minute": 5,
+    "requests_per_day": 50,
+    "ranking": 2
+  }
+]
+
+```
+
+
+### 3. LICENSE
+
+
+
+```text
+MIT License
+
+Copyright (c) 2025 Santosh Kanumuri
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
